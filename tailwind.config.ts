@@ -1,4 +1,6 @@
 import type { Config } from 'tailwindcss';
+import tailwindcssAnimate from 'tailwindcss-animate';
+import typography from '@tailwindcss/typography';
 
 const config = {
   darkMode: ['class'],
@@ -47,6 +49,16 @@ const config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        'gb-primary': '#00C73C',
+        'gb-primary-dark': '#00912C',
+        'gb-secondary': '#1F8FFF',
+        'gb-accent': '#FFD600',
+        'gb-error': '#FF4040',
+        'gb-neutral-100': '#F5F6F7',
+        'gb-neutral-200': '#E5E7EB',
+        'gb-neutral-400': '#B0B8C1',
+        'gb-black': '#222222',
+        'gb-white': '#FFFFFF',
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -69,7 +81,7 @@ const config = {
       },
     },
   },
-  plugins: [require('tailwindcss-animate'), require('@tailwindcss/typography')],
+  plugins: [tailwindcssAnimate, typography],
 } satisfies Config;
 
 export default config;
