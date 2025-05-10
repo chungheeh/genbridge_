@@ -2,10 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useLogout } from '@/hooks/useLogout'
 
 export function SeniorHeader() {
   const pathname = usePathname()
   const isSeniorPath = pathname.startsWith('/senior')
+  const { handleLogout } = useLogout()
 
   return (
     <header className="w-full py-4">
@@ -26,13 +28,16 @@ export function SeniorHeader() {
         
         {/* 데스크탑에서는 Nav 메뉴 */}
         <div className="flex items-center gap-4">
-          <Link href="/login" className="text-base text-muted-foreground hover:text-foreground">
+          <button 
+            onClick={handleLogout} 
+            className="text-base text-muted-foreground hover:text-foreground cursor-pointer"
+          >
             로그아웃
-          </Link>
+          </button>
           <Link href="/senior" className="text-base text-muted-foreground hover:text-foreground">
             홈
           </Link>
-          <Link href="/profile" className="text-base text-muted-foreground hover:text-foreground">
+          <Link href="/senior/profile" className="text-base text-muted-foreground hover:text-foreground">
             회원
           </Link>
         </div>

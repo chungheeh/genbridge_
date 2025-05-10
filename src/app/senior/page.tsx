@@ -15,7 +15,7 @@ import { SeniorHeader } from '@/features/senior/components/SeniorHeader';
 interface Question {
   id: string;
   content: string;
-  status: 'PENDING' | 'ANSWERED' | 'COMPLETED';
+  status: 'pending' | 'answered' | 'completed';
   created_at: string;
 }
 
@@ -66,24 +66,31 @@ export default function SeniorMainPage() {
           setUserName(defaultName);
         }
 
-        // 질문 목록 가져오기
-        const { data: questionsData, error: questionsError } = await supabase
-          .from('questions')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(5);
+        try {
+          // 질문 목록 가져오기
+          const { data: questionsData, error: questionsError } = await supabase
+            .from('questions')
+            .select('*')
+            .eq('created_by', user.id)
+            .order('created_at', { ascending: false })
+            .limit(5);
 
-        if (questionsError) {
-          console.error('Questions error:', questionsError);
-          return;
+          if (questionsError) {
+            console.error('Questions error:', JSON.stringify(questionsError));
+            return;
+          }
+
+          setQuestions(questionsData || []);
+        } catch (questionsException) {
+          console.error('Questions exception:', questionsException);
+          // 질문 로드 실패 시에도 UI는 계속 표시
+          setQuestions([]);
         }
-
-        setQuestions(questionsData || []);
       } catch (error) {
         console.error('Unexpected error:', error);
         // 에러 발생 시 기본값 사용
         setUserName('사용자');
+        setQuestions([]);
       } finally {
         setIsLoading(false);
       }
@@ -132,17 +139,17 @@ export default function SeniorMainPage() {
       title: '내 정보',
       description: '프로필 정보를 관리하세요',
       icon: <UserCircle className="w-6 h-6 text-[#FFD600]" />,
-      href: '/profile',
+      href: '/senior/profile',
     },
   ];
 
   const getStatusBadgeColor = (status: Question['status']) => {
     switch (status) {
-      case 'PENDING':
+      case 'pending':
         return 'bg-yellow-100 text-yellow-800';
-      case 'ANSWERED':
+      case 'answered':
         return 'bg-blue-100 text-blue-800';
-      case 'COMPLETED':
+      case 'completed':
         return 'bg-green-100 text-green-800';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -151,11 +158,11 @@ export default function SeniorMainPage() {
 
   const getStatusText = (status: Question['status']) => {
     switch (status) {
-      case 'PENDING':
+      case 'pending':
         return '답변 대기중';
-      case 'ANSWERED':
+      case 'answered':
         return '답변 완료';
-      case 'COMPLETED':
+      case 'completed':
         return '채택 완료';
       default:
         return '알 수 없음';

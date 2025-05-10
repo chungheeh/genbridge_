@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { useRouter } from 'next/navigation'
 import { fetchProfile, fetchActivities } from '../api'
+import { useLogout } from '@/hooks/useLogout'
 
 export function useProfile() {
-  const router = useRouter()
+  const { handleLogout } = useLogout()
 
   const { data: profile, isLoading: isProfileLoading } = useQuery({
     queryKey: ['profile'],
@@ -14,11 +14,6 @@ export function useProfile() {
     queryKey: ['profile', 'activities'],
     queryFn: fetchActivities
   })
-
-  const handleLogout = async () => {
-    // 로그아웃 처리 로직
-    router.push('/login')
-  }
 
   return {
     profile,

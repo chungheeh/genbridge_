@@ -18,6 +18,8 @@ import { Label } from "@/components/ui/label";
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { toast } from "@/hooks/use-toast";
+import SignupSuccess from '@/components/SignupSuccess'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 // Supabase 클라이언트 생성
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -67,6 +69,7 @@ export default function SignupPage() {
   });
 
   const [passwordError, setPasswordError] = useState<string>("");
+  const [signupSuccessOpen, setSignupSuccessOpen] = useState(false);
 
   // 비밀번호 유효성 검사 함수
   const validatePassword = (password: string): boolean => {
@@ -422,13 +425,22 @@ export default function SignupPage() {
           username
         });
 
+        // [추가] 이메일 중복 체크
+        const { data: existingProfile, error: emailCheckError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', email)
+          .single();
+
+        if (existingProfile && existingProfile.id !== authData.user.id) {
+          throw new Error('이미 가입된 이메일입니다.');
+        }
+
         // 프로필 생성 시도 (최대 3번)
         let profileError;
         const currentEmail = email;
         for (let i = 0; i < 3; i++) {
-          // 잠시 대기
           await new Promise(resolve => setTimeout(resolve, 2000));
-
           const { error } = await supabase
             .from('profiles')
             .upsert({
@@ -444,46 +456,18 @@ export default function SignupPage() {
             });
 
           if (!error) {
-            // 성공하면 반복 중단
             profileError = null;
             break;
           }
-
-          // 이메일 중복 오류인 경우 프로필 조회 시도
-          if (error.code === '23505' && error.message.includes('profiles_email_key')) {
-            // 기존 프로필 조회
-            const { data: existingProfile } = await supabase
-              .from('profiles')
-              .select()
-              .eq('email', currentEmail)
-              .single();
-
-            if (existingProfile && existingProfile.id === authData.user.id) {
-              // 이미 올바른 프로필이 존재하는 경우
-              console.log('기존 프로필이 존재함:', existingProfile);
-              profileError = null;
-              break;
-            }
-          }
-
           profileError = error;
           console.log(`프로필 생성/업데이트 시도 ${i + 1} 실패:`, error);
         }
-
         if (profileError) {
-          console.error('프로필 생성/업데이트 최종 오류:', profileError);
           throw new Error(`프로필 생성/업데이트에 실패했습니다: ${profileError.message}`);
         }
 
         // 4. 회원가입 성공
-        toast({
-          title: "회원가입 성공",
-          description: "회원가입이 완료되었습니다. 로그인 페이지로 이동합니다.",
-        });
-
-        // 5. 로그인 페이지로 이동
-        router.push('/login');
-        
+        setSignupSuccessOpen(true);
       } catch (error: any) {
         console.error('회원가입 처리 중 오류:', error);
         
@@ -811,6 +795,17 @@ export default function SignupPage() {
           </CardContent>
         </Card>
       </div>
+      <Dialog open={signupSuccessOpen} onOpenChange={setSignupSuccessOpen}>
+        <DialogContent className="max-w-md p-0 bg-transparent shadow-none border-none">
+          <DialogHeader className="sr-only">
+            <DialogTitle>회원가입 성공</DialogTitle>
+          </DialogHeader>
+          <SignupSuccess onLogin={() => {
+            setSignupSuccessOpen(false);
+            router.push('/login');
+          }} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

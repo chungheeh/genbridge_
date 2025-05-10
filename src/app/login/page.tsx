@@ -12,6 +12,8 @@ import { useRouter } from "next/navigation";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { toast } from "sonner";
 import { AuthError } from '@supabase/supabase-js';
+import LoginSuccess from '@/components/LoginSuccess';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,6 +24,8 @@ export default function LoginPage() {
   const [youthEmail, setYouthEmail] = useState("");
   const [youthPassword, setYouthPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [loginSuccessOpen, setLoginSuccessOpen] = useState(false);
+  const [userRole, setUserRole] = useState<string>('');
 
   const handleAuthError = (error: AuthError) => {
     switch (error.message) {
@@ -31,6 +35,9 @@ export default function LoginPage() {
         return '이메일 인증이 필요합니다. 이메일을 확인해주세요.';
       case 'User not found':
         return '등록되지 않은 사용자입니다. 회원가입을 먼저 진행해주세요.';
+      case 'Invalid JWT token':
+      case 'InvalidJWTToken':
+        return '세션이 만료되었습니다. 다시 로그인해주세요.';
       default:
         return `로그인 오류: ${error.message}`;
     }
@@ -50,6 +57,10 @@ export default function LoginPage() {
     try {
       // 현재 세션이 있다면 로그아웃
       await supabase.auth.signOut();
+      // 로컬 스토리지에서 이전 토큰 삭제
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('supabase.auth.token');
+      }
 
       // 프로필 테이블에서 이메일로 검색
       const { data: existingProfile, error: profileError } = await supabase
@@ -73,7 +84,7 @@ export default function LoginPage() {
       // 로그인 시도
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: trimmedEmail,
-        password: trimmedPassword,
+        password: trimmedPassword
       });
 
       if (signInError) {
@@ -123,9 +134,9 @@ export default function LoginPage() {
         }
       }
 
-      toast.success('로그인 성공!');
-      router.push('/senior');
-      router.refresh();
+      // 로그인 성공 - 모달 표시로 변경
+      setUserRole('SENIOR');
+      setLoginSuccessOpen(true);
     } catch (error) {
       console.error('예상치 못한 오류:', error);
       toast.error('로그인 중 오류가 발생했습니다.');
@@ -149,6 +160,10 @@ export default function LoginPage() {
     try {
       // 현재 세션이 있다면 로그아웃
       await supabase.auth.signOut();
+      // 로컬 스토리지에서 이전 토큰 삭제
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('supabase.auth.token');
+      }
 
       // 프로필 테이블에서 이메일로 검색
       const { data: existingProfile, error: profileError } = await supabase
@@ -172,7 +187,7 @@ export default function LoginPage() {
       // 로그인 시도
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: trimmedEmail,
-        password: trimmedPassword,
+        password: trimmedPassword
       });
 
       if (signInError) {
@@ -222,9 +237,9 @@ export default function LoginPage() {
         }
       }
 
-      toast.success('로그인 성공!');
-      router.push('/youth');
-      router.refresh();
+      // 로그인 성공 - 모달 표시로 변경
+      setUserRole('YOUTH');
+      setLoginSuccessOpen(true);
     } catch (error) {
       console.error('예상치 못한 오류:', error);
       toast.error('로그인 중 오류가 발생했습니다.');
@@ -396,6 +411,25 @@ export default function LoginPage() {
           </CardContent>
         </Card>
       </div>
+      <Dialog open={loginSuccessOpen} onOpenChange={setLoginSuccessOpen}>
+        <DialogContent className="max-w-md p-0 bg-transparent shadow-none border-none">
+          <DialogHeader className="sr-only">
+            <DialogTitle>로그인 성공</DialogTitle>
+          </DialogHeader>
+          <LoginSuccess 
+            role={userRole}
+            onContinue={() => {
+              setLoginSuccessOpen(false);
+              if (userRole === 'SENIOR') {
+                router.push('/senior');
+              } else {
+                router.push('/youth');
+              }
+              router.refresh();
+            }} 
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

@@ -1,16 +1,19 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { useRouter } from 'next/navigation'
 import { CheckCircle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { motion } from 'framer-motion'
 
-interface SignupSuccessProps {
-  onLogin: () => void
+interface LoginSuccessProps {
+  role: string;
+  onContinue: () => void;
 }
 
-export default function SignupSuccess({ onLogin }: SignupSuccessProps) {
+export default function LoginSuccess({ role, onContinue }: LoginSuccessProps) {
+  const roleName = role === 'SENIOR' ? '시니어' : '청년';
+  const pageInfo = role === 'SENIOR' ? '시니어 홈' : '청년 홈';
+  
   return (
     <div className="flex flex-col items-center justify-center min-h-[300px] bg-[#F5F6F7]">
       <Card className="w-full max-w-md border-[#E5E7EB] shadow-lg">
@@ -32,11 +35,11 @@ export default function SignupSuccess({ onLogin }: SignupSuccessProps) {
             transition={{ delay: 0.2, duration: 0.5 }}
           >
             <h1 className="text-2xl font-semibold tracking-tight text-[#222222]">
-              회원가입이 완료되었습니다.
+              로그인에 성공했습니다
             </h1>
             <p className="text-sm text-[#B0B8C1]">
-              로그인 후 안전하고 편리하게<br />
-              젠브릿지 서비스를 이용하실 수 있습니다.
+              {roleName} 역할로 로그인했습니다.<br />
+              {pageInfo}으로 이동합니다.
             </p>
           </motion.div>
 
@@ -49,9 +52,9 @@ export default function SignupSuccess({ onLogin }: SignupSuccessProps) {
           >
             <Button
               className="w-full bg-[#00C73C] hover:bg-[#00912C] text-white transition-all duration-300 transform active:scale-95 hover:shadow-lg"
-              onClick={onLogin}
+              onClick={onContinue}
             >
-              로그인
+              계속하기
             </Button>
           </motion.div>
         </CardContent>
