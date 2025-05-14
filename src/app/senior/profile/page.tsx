@@ -95,7 +95,7 @@ export default function SeniorProfilePage() {
           const { data: questionsData, error: questionsError } = await supabase
             .from('questions')
             .select('*')
-            .eq('created_by', user.id)
+            .eq('user_id', user.id)
             .order('created_at', { ascending: false })
             .limit(5)
 

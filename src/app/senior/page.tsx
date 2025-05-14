@@ -4,27 +4,47 @@ import { motion } from 'framer-motion';
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Search, MessageSquare, CheckCircle, User, Plus, Clock, HelpCircle, MessageCircle, UserCircle } from "lucide-react";
+import { Search, MessageSquare, CheckCircle, User, Plus, Clock, HelpCircle, MessageCircle, UserCircle, Bot } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useRouter } from "next/navigation";
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { SeniorHeader } from '@/features/senior/components/SeniorHeader';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 interface Question {
   id: string;
   content: string;
   status: 'pending' | 'answered' | 'completed';
   created_at: string;
+  user_id: string;
+  title: string;
 }
 
 export default function SeniorMainPage() {
   const [userName, setUserName] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [questionToDelete, setQuestionToDelete] = useState<string | null>(null);
   const supabase = createClientComponentClient();
   const router = useRouter();
+
+  const handleAskClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    router.push('/senior/ask');
+  };
 
   useEffect(() => {
     async function getUserProfile() {
@@ -53,7 +73,7 @@ export default function SeniorMainPage() {
         if (profileError) {
           console.error('Profile error:', profileError);
           // 프로필이 없는 경우 이메일의 @ 앞부분을 이름으로 사용
-          const defaultName = user.email?.split('@')[0] || '사용자';
+          const defaultName = '사용자';
           setUserName(defaultName);
           return;
         }
@@ -62,8 +82,7 @@ export default function SeniorMainPage() {
           setUserName(profile.name);
         } else {
           // 프로필은 있지만 이름이 없는 경우
-          const defaultName = user.email?.split('@')[0] || '사용자';
-          setUserName(defaultName);
+          setUserName('사용자');
         }
 
         try {
@@ -71,7 +90,7 @@ export default function SeniorMainPage() {
           const { data: questionsData, error: questionsError } = await supabase
             .from('questions')
             .select('*')
-            .eq('created_by', user.id)
+            .eq('user_id', user.id)
             .order('created_at', { ascending: false })
             .limit(5);
 
@@ -97,6 +116,36 @@ export default function SeniorMainPage() {
     }
 
     getUserProfile();
+
+    // 실시간 구독 설정
+    const channel = supabase
+      .channel('questions_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'questions'
+        },
+        async (payload: any) => {
+          // 현재 로그인한 사용자의 질문만 처리
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          if (payload.eventType === 'INSERT' && payload.new.user_id === user.id) {
+            setQuestions(prev => [payload.new as Question, ...prev].slice(0, 5));
+          } else if (payload.eventType === 'DELETE' && payload.old.user_id === user.id) {
+            setQuestions(prev => prev.filter(q => q.id !== payload.old.id));
+          } else if (payload.eventType === 'UPDATE' && payload.new.user_id === user.id) {
+            setQuestions(prev => prev.map(q => q.id === payload.new.id ? (payload.new as Question) : q));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [supabase, router]);
 
   const containerVariants = {
@@ -128,6 +177,12 @@ export default function SeniorMainPage() {
       description: '궁금한 점을 물어보세요',
       icon: <HelpCircle className="w-6 h-6 text-[#00C73C]" />,
       href: '/senior/ask',
+    },
+    {
+      title: 'AI에게 질문하기',
+      description: 'AI가 24시간 답변해드려요',
+      icon: <Bot className="w-6 h-6 text-[#FF6B6B]" />,
+      href: '/senior/ask-ai',
     },
     {
       title: '답변 확인하기',
@@ -169,6 +224,25 @@ export default function SeniorMainPage() {
     }
   };
 
+  const handleDeleteQuestion = async (questionId: string) => {
+    try {
+      const { error } = await supabase
+        .from('questions')
+        .delete()
+        .eq('id', questionId);
+
+      if (error) {
+        throw error;
+      }
+
+      setQuestions(questions.filter(q => q.id !== questionId));
+      toast.success('질문이 삭제되었습니다.');
+    } catch (error) {
+      console.error('Error deleting question:', error);
+      toast.error('질문 삭제에 실패했습니다.');
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* 헤더 섹션 */}
@@ -181,6 +255,7 @@ export default function SeniorMainPage() {
             <Link 
               href="/senior/ask"
               className="py-4 text-lg font-medium text-neutral-400 hover:text-neutral-600"
+              onClick={handleAskClick}
             >
               질문하기
             </Link>
@@ -189,6 +264,12 @@ export default function SeniorMainPage() {
               className="py-4 text-lg font-medium text-neutral-400 hover:text-neutral-600"
             >
               답변 확인
+            </Link>
+            <Link 
+              href="/senior/ask-ai"
+              className="py-4 text-lg font-medium text-neutral-400 hover:text-neutral-600"
+            >
+              AI에게 질문하기
             </Link>
           </div>
         </div>
@@ -230,7 +311,10 @@ export default function SeniorMainPage() {
             >
               {menuItems.map((item, index) => (
                 <motion.div key={index} variants={itemVariants}>
-                  <Link href={item.href}>
+                  <Link 
+                    href={item.href} 
+                    onClick={item.href === '/senior/ask' ? handleAskClick : undefined}
+                  >
                     <Card className="senior-card h-full p-8 cursor-pointer">
                       <motion.div
                         whileHover={{ scale: 1.02 }}
@@ -269,21 +353,51 @@ export default function SeniorMainPage() {
                             </span>
                             <span className="text-sm text-gray-500 flex items-center gap-1">
                               <Clock className="w-4 h-4" />
-                              {format(new Date(question.created_at), 'PPP', { locale: ko })}
+                              {format(new Date(question.created_at), 'PPP a h시 mm분', { locale: ko })}
                             </span>
                           </div>
                           <p className="text-lg font-medium line-clamp-1">{question.content}</p>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="ml-4 hover:bg-senior-bg"
-                          asChild
-                        >
-                          <Link href={`/senior/answers/${question.id}`}>
-                            자세히 보기
-                          </Link>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="ml-4 hover:bg-senior-bg"
+                            asChild
+                          >
+                            <Link href={`/senior/answers/${question.id}`}>
+                              자세히 보기
+                            </Link>
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-500 hover:bg-red-50 hover:text-red-600"
+                              >
+                                삭제
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>질문 삭제</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  이 질문을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>취소</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-red-500 hover:bg-red-600"
+                                  onClick={() => handleDeleteQuestion(question.id)}
+                                >
+                                  삭제
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -298,7 +412,10 @@ export default function SeniorMainPage() {
                       asChild
                       className="senior-button"
                     >
-                      <Link href="/senior/ask">
+                      <Link 
+                        href="/senior/ask"
+                        onClick={handleAskClick}
+                      >
                         질문하기
                       </Link>
                     </Button>

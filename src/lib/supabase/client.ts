@@ -1,12 +1,6 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { Database } from '../database.types'
 
-export function createClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error("Supabase URL과 Anonymous Key가 설정되지 않았습니다.");
-  }
-
-  return createSupabaseClient(supabaseUrl, supabaseAnonKey);
+export const createBrowserClient = () => {
+  return createClientComponentClient<Database>()
 } 

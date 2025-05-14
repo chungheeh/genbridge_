@@ -4,7 +4,12 @@ import typography from '@tailwindcss/typography';
 
 const config = {
   darkMode: ['class'],
-  content: ['./src/**/*.{ts,tsx}'],
+  content: [
+    './pages/**/*.{ts,tsx}',
+    './components/**/*.{ts,tsx}',
+    './app/**/*.{ts,tsx}',
+    './src/**/*.{ts,tsx}',
+  ],
   prefix: '',
   theme: {
     container: {
@@ -48,6 +53,12 @@ const config = {
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
+        },
+        senior: {
+          DEFAULT: '#00C73C',
+          dark: '#00912C',
+          light: '#04C73C',
+          bg: '#04c73c10',
         },
         'gb-primary': '#00C73C',
         'gb-primary-dark': '#00912C',

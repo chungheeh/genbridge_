@@ -9,55 +9,75 @@ import { Card, CardContent } from "@/components/ui/card";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useRouter } from "next/navigation";
 import { toast } from 'sonner';
-import { VoiceRecorder } from "@/features/senior/components/VoiceRecorder";
+import VoiceRecorder from "@/features/senior/components/VoiceRecorder";
 import { SeniorHeader } from "@/features/senior/components/SeniorHeader";
+import { Database } from '@/types/supabase';
+import { createQuestion } from '@/lib/api';
+import { Input } from '@/components/ui/input';
 
 export default function SeniorPage() {
-  const [content, setContent] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const supabase = createClientComponentClient();
   const router = useRouter();
+  const supabase = createClientComponentClient();
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!content.trim()) {
-      toast.error('질문 내용을 입력해주세요.');
+    if (isLoading) {
       return;
     }
 
-    setIsSubmitting(true);
+    if (!title.trim() || !content.trim()) {
+      toast.error('제목과 내용을 모두 입력해주세요.');
+      return;
+    }
 
     try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
       
-      if (authError || !user) {
+      if (userError) {
+        console.error('User error:', userError);
+        toast.error('사용자 정보를 가져오는데 실패했습니다.');
+        return;
+      }
+
+      if (!user?.id) {
         toast.error('로그인이 필요합니다.');
         router.push('/login');
         return;
       }
 
-      const { error: insertError } = await supabase
+      setIsLoading(true);
+      
+      const { data, error } = await supabase
         .from('questions')
         .insert([
           {
-            user_id: user.id,
+            title: title.trim(),
             content: content.trim(),
-            status: 'PENDING'
+            user_id: user.id,
+            is_ai_question: false,
+            status: 'pending'
           }
-        ]);
+        ])
+        .select()
+        .single();
 
-      if (insertError) {
-        throw insertError;
+      if (error) {
+        console.error('Supabase error:', error);
+        toast.error('질문 등록에 실패했습니다: ' + error.message);
+        return;
       }
 
       toast.success('질문이 등록되었습니다.');
-      router.push('/senior');
+      router.push('/senior/answers');
     } catch (error) {
-      console.error('Error submitting question:', error);
-      toast.error('질문 등록에 실패했습니다. 다시 시도해주세요.');
+      console.error('Unexpected error:', error);
+      toast.error('예기치 않은 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
-      setIsSubmitting(false);
+      setIsLoading(false);
     }
   };
 
@@ -85,6 +105,12 @@ export default function SeniorPage() {
               className="py-4 text-lg font-medium text-neutral-400 hover:text-neutral-600"
             >
               답변 확인
+            </Link>
+            <Link 
+              href="/senior/ask-ai"
+              className="py-4 text-lg font-medium text-neutral-400 hover:text-neutral-600"
+            >
+              AI에게 질문하기
             </Link>
           </div>
         </div>
@@ -115,11 +141,31 @@ export default function SeniorPage() {
               <CardContent className="p-8">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-2xl font-medium text-black">질문 내용</h2>
+                    <h2 className="text-2xl font-medium text-black">질문 작성</h2>
                     <VoiceRecorder onTranscriptionComplete={handleTranscriptionComplete} />
                   </div>
-                  <div className="relative">
+                  
+                  {/* 제목 입력 필드 */}
+                  <div>
+                    <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
+                      제목
+                    </label>
+                    <Input
+                      id="title"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="질문의 제목을 입력해주세요"
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* 내용 입력 필드 */}
+                  <div>
+                    <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-2">
+                      내용
+                    </label>
                     <Textarea
+                      id="content"
                       placeholder="궁금한 점을 입력하세요..."
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
@@ -128,20 +174,31 @@ export default function SeniorPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-4 mt-4">
+                <div className="flex flex-col gap-4 mt-4">
+                  <div className="flex justify-end gap-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => router.back()}
+                    >
+                      취소
+                    </Button>
+                    <Button
+                      onClick={handleSubmit}
+                      disabled={isLoading}
+                      className="bg-primary hover:bg-primary/90"
+                    >
+                      {isLoading ? '등록 중...' : '질문하기'}
+                    </Button>
+                  </div>
                   <Button
-                    type="button"
+                    asChild
                     variant="outline"
-                    onClick={() => router.back()}
+                    className="w-full border-[#00C73C] text-[#00C73C] hover:bg-[#00C73C] hover:text-white"
                   >
-                    취소
-                  </Button>
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}
-                    className="bg-primary hover:bg-primary/90"
-                  >
-                    {isSubmitting ? '등록 중...' : '질문하기'}
+                    <Link href="/senior/ask-ai">
+                      AI에게 질문하기
+                    </Link>
                   </Button>
                 </div>
               </CardContent>

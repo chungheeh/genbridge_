@@ -43,109 +43,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleSeniorLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!seniorEmail || !seniorPassword) {
-      toast.error('이메일과 비밀번호를 모두 입력해주세요.');
-      return;
-    }
-
-    const trimmedEmail = seniorEmail.trim().toLowerCase();
-    const trimmedPassword = seniorPassword.trim();
-    
-    setIsLoading(true);
-    try {
-      // 현재 세션이 있다면 로그아웃
-      await supabase.auth.signOut();
-      // 로컬 스토리지에서 이전 토큰 삭제
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('supabase.auth.token');
-      }
-
-      // 프로필 테이블에서 이메일로 검색
-      const { data: existingProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', trimmedEmail)
-        .single();
-
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.error('프로필 검색 에러:', profileError);
-        toast.error('프로필 확인 중 오류가 발생했습니다.');
-        return;
-      }
-
-      // 프로필이 있지만 SENIOR가 아닌 경우
-      if (existingProfile && existingProfile.role !== 'SENIOR') {
-        toast.error('시니어 계정이 아닙니다.');
-        return;
-      }
-
-      // 로그인 시도
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: trimmedEmail,
-        password: trimmedPassword
-      });
-
-      if (signInError) {
-        console.error('로그인 에러:', signInError);
-        
-        // 계정이 없는 경우
-        if (signInError.message === 'Invalid login credentials' && !existingProfile) {
-          toast.error('등록되지 않은 계정입니다. 회원가입을 먼저 진행해주세요.');
-          return;
-        }
-        
-        // 비밀번호가 틀린 경우
-        if (signInError.message === 'Invalid login credentials' && existingProfile) {
-          toast.error('비밀번호가 올바르지 않습니다.');
-          return;
-        }
-
-        toast.error(handleAuthError(signInError));
-        return;
-      }
-
-      const { user } = data;
-      if (!user) {
-        toast.error('로그인에 실패했습니다.');
-        return;
-      }
-
-      // 프로필이 없는 경우 생성
-      if (!existingProfile) {
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              id: user.id,
-              email: user.email,
-              username: user.email?.split('@')[0] || user.id,
-              role: 'SENIOR',
-              created_at: new Date().toISOString()
-            }
-          ]);
-
-        if (insertError) {
-          console.error('프로필 생성 에러:', insertError);
-          toast.error('프로필 생성에 실패했습니다.');
-          await supabase.auth.signOut();
-          return;
-        }
-      }
-
-      // 로그인 성공 - 모달 표시로 변경
-      setUserRole('SENIOR');
-      setLoginSuccessOpen(true);
-    } catch (error) {
-      console.error('예상치 못한 오류:', error);
-      toast.error('로그인 중 오류가 발생했습니다.');
-      await supabase.auth.signOut();
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleYouthLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!youthEmail || !youthPassword) {
@@ -158,88 +55,223 @@ export default function LoginPage() {
 
     setIsLoading(true);
     try {
-      // 현재 세션이 있다면 로그아웃
-      await supabase.auth.signOut();
-      // 로컬 스토리지에서 이전 토큰 삭제
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('supabase.auth.token');
-      }
-
-      // 프로필 테이블에서 이메일로 검색
-      const { data: existingProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', trimmedEmail)
-        .single();
-
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.error('프로필 검색 에러:', profileError);
-        toast.error('프로필 확인 중 오류가 발생했습니다.');
-        return;
-      }
-
-      // 프로필이 있지만 YOUTH가 아닌 경우
-      if (existingProfile && existingProfile.role !== 'YOUTH') {
-        toast.error('청년 계정이 아닙니다.');
-        return;
-      }
-
       // 로그인 시도
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email: trimmedEmail,
         password: trimmedPassword
       });
 
       if (signInError) {
         console.error('로그인 에러:', signInError);
-        
-        // 계정이 없는 경우
-        if (signInError.message === 'Invalid login credentials' && !existingProfile) {
-          toast.error('등록되지 않은 계정입니다. 회원가입을 먼저 진행해주세요.');
-          return;
-        }
-        
-        // 비밀번호가 틀린 경우
-        if (signInError.message === 'Invalid login credentials' && existingProfile) {
-          toast.error('비밀번호가 올바르지 않습니다.');
-          return;
-        }
-
         toast.error(handleAuthError(signInError));
         return;
       }
 
-      const { user } = data;
-      if (!user) {
+      if (!signInData.user) {
         toast.error('로그인에 실패했습니다.');
         return;
       }
 
-      // 프로필이 없는 경우 생성
-      if (!existingProfile) {
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              id: user.id,
-              email: user.email,
-              username: user.email?.split('@')[0] || user.id,
-              role: 'YOUTH',
-              created_at: new Date().toISOString()
-            }
-          ]);
+      // 프로필 조회 시도 (최대 3번)
+      let profile = null;
+      let profileError = null;
+      let attempts = 0;
+      const maxAttempts = 3;
 
-        if (insertError) {
-          console.error('프로필 생성 에러:', insertError);
+      while (!profile && attempts < maxAttempts) {
+        attempts++;
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', signInData.user.id)
+            .single();
+
+          if (data) {
+            profile = data;
+            break;
+          }
+
+          if (error && error.code !== 'PGRST116') {
+            profileError = error;
+            break;
+          }
+
+          // PGRST116 (데이터 없음) 에러인 경우 다음 시도 전 대기
+          if (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (error) {
+          console.error(`프로필 조회 시도 ${attempts} 실패:`, error);
+          if (attempts === maxAttempts) {
+            profileError = error;
+          }
+        }
+      }
+
+      // 프로필이 없는 경우 생성
+      if (!profile && !profileError) {
+        try {
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .insert({
+              id: signInData.user.id,
+              email: signInData.user.email,
+              name: signInData.user.user_metadata.name || signInData.user.email?.split('@')[0] || '사용자',
+              role: 'YOUTH',
+              username: signInData.user.user_metadata.username || signInData.user.email?.split('@')[0] || '사용자'
+            })
+            .select()
+            .single();
+
+          if (createError) {
+            throw createError;
+          }
+
+          profile = newProfile;
+        } catch (error) {
+          console.error('프로필 생성 에러:', error);
           toast.error('프로필 생성에 실패했습니다.');
           await supabase.auth.signOut();
           return;
         }
+      } else if (profileError) {
+        console.error('프로필 조회 에러:', profileError);
+        toast.error('프로필 정보를 불러오는데 실패했습니다.');
+        await supabase.auth.signOut();
+        return;
       }
 
-      // 로그인 성공 - 모달 표시로 변경
+      // 역할 확인
+      if (profile.role !== 'YOUTH') {
+        toast.error('청년 계정이 아닙니다.');
+        await supabase.auth.signOut();
+        return;
+      }
+
+      // 로그인 성공
       setUserRole('YOUTH');
       setLoginSuccessOpen(true);
+      router.refresh();
+    } catch (error) {
+      console.error('예상치 못한 오류:', error);
+      toast.error('로그인 중 오류가 발생했습니다.');
+      await supabase.auth.signOut();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSeniorLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!seniorEmail || !seniorPassword) {
+      toast.error('이메일과 비밀번호를 모두 입력해주세요.');
+      return;
+    }
+
+    const trimmedEmail = seniorEmail.trim().toLowerCase();
+    const trimmedPassword = seniorPassword.trim();
+
+    setIsLoading(true);
+    try {
+      // 로그인 시도
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password: trimmedPassword
+      });
+
+      if (signInError) {
+        console.error('로그인 에러:', signInError);
+        toast.error(handleAuthError(signInError));
+        return;
+      }
+
+      if (!signInData.user) {
+        toast.error('로그인에 실패했습니다.');
+        return;
+      }
+
+      // 프로필 조회 시도 (최대 3번)
+      let profile = null;
+      let profileError = null;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (!profile && attempts < maxAttempts) {
+        attempts++;
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', signInData.user.id)
+            .single();
+
+          if (data) {
+            profile = data;
+            break;
+          }
+
+          if (error && error.code !== 'PGRST116') {
+            profileError = error;
+            break;
+          }
+
+          // PGRST116 (데이터 없음) 에러인 경우 다음 시도 전 대기
+          if (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (error) {
+          console.error(`프로필 조회 시도 ${attempts} 실패:`, error);
+          if (attempts === maxAttempts) {
+            profileError = error;
+          }
+        }
+      }
+
+      // 프로필이 없는 경우 생성
+      if (!profile && !profileError) {
+        try {
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .insert({
+              id: signInData.user.id,
+              email: signInData.user.email,
+              name: signInData.user.user_metadata.name || signInData.user.email?.split('@')[0] || '사용자',
+              role: 'SENIOR',
+              username: signInData.user.user_metadata.username || signInData.user.email?.split('@')[0] || '사용자'
+            })
+            .select()
+            .single();
+
+          if (createError) {
+            throw createError;
+          }
+
+          profile = newProfile;
+        } catch (error) {
+          console.error('프로필 생성 에러:', error);
+          toast.error('프로필 생성에 실패했습니다.');
+          await supabase.auth.signOut();
+          return;
+        }
+      } else if (profileError) {
+        console.error('프로필 조회 에러:', profileError);
+        toast.error('프로필 정보를 불러오는데 실패했습니다.');
+        await supabase.auth.signOut();
+        return;
+      }
+
+      // 역할 확인
+      if (profile.role !== 'SENIOR') {
+        toast.error('시니어 계정이 아닙니다.');
+        await supabase.auth.signOut();
+        return;
+      }
+
+      // 로그인 성공
+      setUserRole('SENIOR');
+      setLoginSuccessOpen(true);
+      router.refresh();
     } catch (error) {
       console.error('예상치 못한 오류:', error);
       toast.error('로그인 중 오류가 발생했습니다.');
@@ -290,7 +322,7 @@ export default function LoginPage() {
                 <Card className="overflow-hidden border">
                   <CardContent className="p-0">
                     <Image 
-                      src="https://picsum.photos/seed/genbridge-login/800/400" 
+                      src="https://picsum.photos/id/1/800/400" 
                       alt="로그인 이미지"
                       width={800}
                       height={400}
@@ -351,7 +383,7 @@ export default function LoginPage() {
                 <Card className="overflow-hidden border">
                   <CardContent className="p-0">
                     <Image 
-                      src="https://picsum.photos/seed/genbridge-login/800/400" 
+                      src="https://picsum.photos/id/2/800/400" 
                       alt="로그인 이미지"
                       width={800}
                       height={400}

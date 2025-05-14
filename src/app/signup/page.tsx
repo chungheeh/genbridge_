@@ -344,7 +344,6 @@ export default function SignupPage() {
           description: "모든 필수 정보를 입력해주세요.",
           variant: "destructive"
         });
-        setIsSubmitting(false);
         return;
       }
 
@@ -355,7 +354,6 @@ export default function SignupPage() {
           description: "비밀번호가 일치하지 않습니다.",
           variant: "destructive"
         });
-        setIsSubmitting(false);
         return;
       }
 
@@ -366,121 +364,114 @@ export default function SignupPage() {
           description: "필수 약관에 동의해주세요.",
           variant: "destructive"
         });
-        setIsSubmitting(false);
         return;
       }
 
       const email = `${emailId}@${emailDomain}`;
+      const finalUsername = username || emailId;
 
       try {
-        // 1. 프로필 데이터 준비
-        const profileData = {
-          email,
-          name,
-          role,
-          username,
-          is_senior_verified: role === 'SENIOR'
-        };
+        // 1. 이메일과 사용자명 중복 체크
+        const { data: existingUser, error: userCheckError } = await supabase
+          .from('profiles')
+          .select('id, email, username')
+          .or(`email.eq.${email},username.eq.${finalUsername}`)
+          .maybeSingle();
+
+        if (existingUser) {
+          if (existingUser.email === email) {
+            toast({
+              title: "이메일 중복",
+              description: "이미 가입된 이메일입니다.",
+              variant: "destructive"
+            });
+          } else {
+            toast({
+              title: "사용자명 중복",
+              description: "이미 사용 중인 사용자명입니다.",
+              variant: "destructive"
+            });
+          }
+          return;
+        }
 
         // 2. Supabase Auth로 회원가입
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
           options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
             data: {
               name,
               role,
-              username,
-              is_senior_verified: role === 'SENIOR',
-              email_confirmed: true
+              username: username || emailId
             }
           }
         });
 
-        if (authError) {
-          // 보안 딜레이 관련 오류 처리
-          if (authError.message.includes('security purposes') || authError.message.includes('10 seconds')) {
-            toast({
-              title: "잠시 기다려주세요",
-              description: "보안을 위해 10초 후에 다시 시도해주세요.",
-              variant: "default"
-            });
-            return;
+        if (signUpError) throw signUpError;
+        if (!authData.user) throw new Error('사용자 정보를 찾을 수 없습니다.');
+
+        // 3. 프로필 생성 전 잠시 대기 (Supabase Auth 사용자 생성 완료 대기)
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 4. 프로필 생성 시도 (최대 3번)
+        let profileCreated = false;
+        let attempts = 0;
+        const maxAttempts = 3;
+
+        while (!profileCreated && attempts < maxAttempts) {
+          attempts++;
+          try {
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .insert({
+                id: authData.user.id,
+                email: email,
+                name: name,
+                role: role,
+                username: finalUsername
+              });
+
+            if (!profileError) {
+              profileCreated = true;
+              break;
+            }
+
+            if (attempts < maxAttempts) {
+              // 다음 시도 전 대기
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            } else {
+              throw profileError;
+            }
+          } catch (error) {
+            console.error(`프로필 생성 시도 ${attempts} 실패:`, error);
+            if (attempts === maxAttempts) {
+              throw error;
+            }
           }
-          throw new Error(authError.message);
         }
 
-        if (!authData.user?.id) {
-          throw new Error('사용자 ID를 찾을 수 없습니다.');
-        }
-
-        console.log('회원가입 성공:', authData.user);
-
-        // 3. 프로필 생성 또는 업데이트
-        console.log('프로필 생성/업데이트 시도:', {
-          id: authData.user.id,
-          email,
-          name,
-          role,
-          username
-        });
-
-        // [추가] 이메일 중복 체크
-        const { data: existingProfile, error: emailCheckError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('email', email)
-          .single();
-
-        if (existingProfile && existingProfile.id !== authData.user.id) {
-          throw new Error('이미 가입된 이메일입니다.');
-        }
-
-        // 프로필 생성 시도 (최대 3번)
-        let profileError;
-        const currentEmail = email;
-        for (let i = 0; i < 3; i++) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          const { error } = await supabase
-            .from('profiles')
-            .upsert({
-              id: authData.user.id,
-              email: currentEmail,
-              name,
-              role,
-              username,
-              is_senior_verified: role === 'SENIOR'
-            }, {
-              onConflict: 'id',
-              ignoreDuplicates: false
-            });
-
-          if (!error) {
-            profileError = null;
-            break;
+        if (!profileCreated) {
+          // 프로필 생성 실패 시 사용자 삭제 시도
+          try {
+            await supabase.auth.admin.deleteUser(authData.user.id);
+          } catch (deleteError) {
+            console.error('사용자 삭제 실패:', deleteError);
           }
-          profileError = error;
-          console.log(`프로필 생성/업데이트 시도 ${i + 1} 실패:`, error);
-        }
-        if (profileError) {
-          throw new Error(`프로필 생성/업데이트에 실패했습니다: ${profileError.message}`);
+          throw new Error('프로필 생성에 실패했습니다.');
         }
 
-        // 4. 회원가입 성공
+        // 5. 회원가입 성공
         setSignupSuccessOpen(true);
+        
       } catch (error: any) {
         console.error('회원가입 처리 중 오류:', error);
-        
-        // 에러 발생 시 로그아웃 처리
-        await supabase.auth.signOut();
-        
         toast({
           title: "회원가입 실패",
           description: error.message || "회원가입 처리 중 오류가 발생했습니다.",
           variant: "destructive"
         });
-      } finally {
-        setIsSubmitting(false);
       }
     } catch (error) {
       console.error('회원가입 처리 중 오류:', error);
@@ -489,6 +480,8 @@ export default function SignupPage() {
         description: "회원가입 처리 중 오류가 발생했습니다.",
         variant: "destructive"
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

@@ -1,31 +1,64 @@
 'use client'
 
-import { useState } from 'react'
-import { useReactMediaRecorder } from 'react-media-recorder'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Mic, Square } from 'lucide-react'
+import dynamic from 'next/dynamic'
+import { toast } from 'sonner'
 
 interface VoiceRecorderProps {
   onTranscriptionComplete: (text: string) => void
 }
 
-export const VoiceRecorder = ({ onTranscriptionComplete }: VoiceRecorderProps) => {
+const VoiceRecorder = ({ onTranscriptionComplete }: VoiceRecorderProps) => {
   const [isLoading, setIsLoading] = useState(false)
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
+  const [audioChunks, setAudioChunks] = useState<Blob[]>([])
+  const [isRecording, setIsRecording] = useState(false)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
 
-  const { status, startRecording, stopRecording, mediaBlobUrl } = useReactMediaRecorder({
-    audio: true,
-    blobPropertyBag: { type: 'audio/webm' }
-  })
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      const chunks: Blob[] = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data)
+        }
+      }
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' })
+        const url = URL.createObjectURL(blob)
+        setAudioUrl(url)
+        setAudioChunks(chunks)
+      }
+
+      setMediaRecorder(recorder)
+      recorder.start()
+      setIsRecording(true)
+    } catch (error) {
+      console.error('Failed to start recording:', error)
+      toast.error('마이크 접근에 실패했습니다.')
+    }
+  }, [])
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop()
+      setIsRecording(false)
+      mediaRecorder.stream.getTracks().forEach(track => track.stop())
+    }
+  }, [mediaRecorder, isRecording])
 
   const handleStopRecording = async () => {
     stopRecording()
-    if (mediaBlobUrl) {
+    if (audioUrl && audioChunks.length > 0) {
       setIsLoading(true)
       try {
-        const response = await fetch(mediaBlobUrl)
-        const audioBlob = await response.blob()
-        
-        // Blob을 File로 변환
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
         const audioFile = new File([audioBlob], 'audio.webm', { type: 'audio/webm' })
         
         const formData = new FormData()
@@ -44,15 +77,27 @@ export const VoiceRecorder = ({ onTranscriptionComplete }: VoiceRecorderProps) =
         onTranscriptionComplete(data.text)
       } catch (error) {
         console.error('음성 인식 중 오류가 발생했습니다:', error)
+        toast.error('음성 인식 중 오류가 발생했습니다.')
       } finally {
         setIsLoading(false)
+        setAudioUrl(null)
+        setAudioChunks([])
       }
     }
   }
 
+  useEffect(() => {
+    return () => {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop()
+        mediaRecorder.stream.getTracks().forEach(track => track.stop())
+      }
+    }
+  }, [mediaRecorder])
+
   return (
     <div className="flex items-center gap-2">
-      {status === 'recording' ? (
+      {isRecording ? (
         <Button
           variant="destructive"
           size="icon"
@@ -74,4 +119,9 @@ export const VoiceRecorder = ({ onTranscriptionComplete }: VoiceRecorderProps) =
       {isLoading && <span className="text-sm text-muted-foreground">음성을 처리중입니다...</span>}
     </div>
   )
-} 
+}
+
+// NoSSR로 감싸서 클라이언트 사이드에서만 렌더링되도록 합니다
+export default dynamic(() => Promise.resolve(VoiceRecorder), {
+  ssr: false
+}) 
